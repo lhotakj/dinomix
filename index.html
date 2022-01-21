@@ -1,0 +1,286 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="https://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style type="text/css">
+
+        @font-face {
+            font-family: 'dinosaurregular';
+            src: url('ttf/dinosaur-webfont.woff2') format('woff2'),
+            url('ttf/dinosaur-webfont.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        button {
+            background-color: transparent;
+            color: inherit;
+            border-width: 0;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        figure {
+            margin: 0;
+        }
+
+        ul, ol, dd {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            margin: 0;
+            font-size: inherit;
+            font-weight: inherit;
+        }
+
+        p {
+            margin: 0;
+        }
+
+        cite {
+            font-style: normal;
+        }
+
+        fieldset {
+            border-width: 0;
+            padding: 0;
+            margin: 0;
+        }
+
+        body {
+            font-family: 'dinosaurregular';
+        }
+
+        h1 {
+            color: #175423;
+            font-size: larger;
+            left: auto;
+            right: auto;
+            border: 2px solid #175423;
+            padding: 5px 13px 5px 13px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #92e371;
+            line-height: 100%;
+            text-align: center;
+        }
+
+        .center-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #header-text {
+
+        }
+
+        .status-text {
+            display: inline;
+            text-align: center;
+            border: 2px solid #175423;
+            padding: 0px 13px 0px 13px;
+            border-radius: 5px;
+            background-color: #b3ec9d;
+            line-height: 80%;
+            color: #106a10;
+        }
+
+        #header {
+            align-items: unset;
+            justify-content: unset;
+            text-align: unset;
+            height: 800px;
+            position: relative;
+            /* left:-5.6%; */
+            z-index: 100;
+            width: 800px;
+            padding: 0;
+
+        }
+
+        .left {
+            align-items: unset;
+            justify-content: unset;
+            text-align: left;
+            left: 0;
+            position: absolute;
+        }
+
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <script>
+
+        $(document).ready(function () {
+
+            let speedEgg = 50;
+            let speedMeteorite = 20;
+            let counterMeteorites = 0;
+            let counterEggs = 0;
+            let counterSavedEggs = 0;
+            let maxMeteorites = 100;
+            let maxEggs = 10;
+            let delayBetweenMeteorites = 500;
+            let delayBetweenEggs = 2000;
+
+            function sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+
+            function performMeteoriteFall(object, process) {
+                let top = $('#' + object).css('top');
+                let top1 = parseInt(top.replace("px", ""));
+                $('#' + object).css('top', top1 + 5 + "px");
+                if (top1 > 530) {
+                    let impact = $('#' + object).position().left - 25;
+                    let uniqueTimestamp = Math.round(+new Date() / 1000).toString();
+                    $("#canvas").append("<img src=\"./meteor-crater.png\" style=\"width:120px; left:" + impact + "px; top:580px; position: absolute\" id=\"crater" + uniqueTimestamp + "\" name=\"crater" + uniqueTimestamp + "\" />");
+
+                    sleep(1500).then(() => {
+                        $('#crater' + uniqueTimestamp).fadeOut(30);
+                        $('#crater' + uniqueTimestamp).remove();
+                    });
+
+                    $('#' + object).remove();
+                    clearInterval(process);
+
+
+                    if (counterMeteorites < maxMeteorites) {
+                        sleep(delayBetweenMeteorites).then(() => {
+                            meteoriteFall();
+                        });
+                    }
+                }
+            }
+
+            function performEggFall(object, process) {
+                $('#status-1').text("Eggs: " + counterEggs + "/" + maxEggs);
+                let top = $('#' + object).css('top');
+                let top1 = parseInt(top.replace("px", ""));
+                $('#' + object).css('top', top1 + 6 + "px");
+                if (top1 > 550) {
+                    clearInterval(process);
+
+                    if (($('#' + object).position().left > $('#dino').position().left) && ($('#' + object).position().left + 20 < $('#dino').position().left + 120)) {
+                        // caught
+                        $('#' + object).remove();
+                        counterSavedEggs++;
+                        $('#status-2').text("Eggs saved: " + counterSavedEggs);
+                    } else {
+
+                        // break
+                        $('#canvas').css('background', 'rgba(255, 0, 0, 0.25)').fadeIn(10);
+
+                        $('#' + object).attr('src', 'egg-white-2.png');
+                        sleep(50).then(() => {
+                            $('#' + object).attr('src', 'egg-white-3.png');
+                        });
+                        sleep(50).then(() => {
+                            $('#canvas').css('background', 'url("./background.jpg")');
+                            $('#canvas').css('background-size', 'contain, cover');
+                        });
+                    }
+                    if (counterEggs < maxEggs) {
+                        sleep(delayBetweenEggs).then(() => {
+                            $('#' + object).remove();
+                            eggFall();
+                        });
+                    }
+                }
+            }
+
+
+            function meteoriteFall() {
+                counterMeteorites++;
+                let pos = Math.floor(Math.random() * 1060) + 20;
+                $("#canvas").append("<img src=\"./meteor-green.png\" style=\"left:" + pos + "px; top:0px; width: 70px; position: absolute\" id=\"meteorit\" name=\"meteorit\" />");
+                let mateoriteProcess = setInterval(function () {
+                    d = performMeteoriteFall('meteorit', mateoriteProcess);
+                }, speedMeteorite);
+            }
+
+            function eggFall() {
+                counterEggs++;
+                let pos = Math.floor(Math.random() * 1060) + 20;
+                $("#canvas").append("<img src=\"./egg-white-1.png\" style=\"left:" + pos + "px; top:0px; width: 74px; position: absolute\" id=\"egg\" name=\"egg\" />");
+                let eggProcess = setInterval(function () {
+                    d = performEggFall('egg', eggProcess);
+                }, speedEgg);
+            }
+
+
+            document.onkeydown = function (e) {
+                switch (e.keyCode) {
+                    case 37:
+                        let left = $('#dino').css('left');
+                        let left1 = parseInt(left.replace("px", ""));
+                        $('#dino').css('left', left1 - 15 + "px");
+                        break;
+                    case 39:
+                        let right = $('#dino').css('left');
+                        let right1 = parseInt(right.replace("px", ""));
+                        $('#dino').css('left', right1 + 15 + "px");
+                        break;
+                }
+            };
+
+            meteoriteFall();
+            eggFall();
+
+        });
+
+    </script>
+
+
+</head>
+<html>
+
+<div class="center-screen">
+    <div id="header">
+        <h1><span style='color:#660033;'>D</span>
+            <span style='color:#ff8a24;'>I</span>
+            <span style='color:#d23852;'>N</span>
+            <span style='color:#4033b2;'>O</span>
+            <span style='color:#ff6699;'>M</span>
+            <span style='color:#993300;'>I</span>
+            <span style='color:#ccff33;'>X</span></h1>
+        <div class="left">
+            <div class="status-text" id="status-1">
+                Eggs: ??/??
+            </div>
+            <div class="status-text" id="status-2">
+                Eggs saved: 0
+            </div>
+        </div>
+    </div>
+
+    <div style="max-width:1152px; max-height:648px; position: absolute; background-image: url('./background.jpg'); background-repeat: no-repeat; background-size: contain, cover;   height: 648px; width: 1152px;"
+         id="canvas" name="canvas">
+
+        <img src="./dino1.png" style="left:950px; top:480px; position: absolute" id="dino" name="dino"/>
+    </div>
+
+</div>
+
+</html>
+</div>
+</html>
