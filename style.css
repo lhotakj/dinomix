@@ -1,0 +1,118 @@
+@font-face {
+    font-family: 'dinosaurregular';
+    src: url('ttf/dinosaur-webfont.woff2') format('woff2'),
+    url('ttf/dinosaur-webfont.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+button {
+    background-color: transparent;
+    color: inherit;
+    border-width: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+figure {
+    margin: 0;
+}
+
+ul, ol, dd {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+p {
+    margin: 0;
+}
+
+cite {
+    font-style: normal;
+}
+
+fieldset {
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+}
+
+body {
+    font-family: 'dinosaurregular';
+}
+
+h1 {
+    color: #175423;
+    font-size: larger;
+    left: auto;
+    right: auto;
+    border: 2px solid #175423;
+    padding: 5px 13px 5px 13px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    background-color: #92e371;
+    line-height: 100%;
+    text-align: center;
+}
+
+.center-screen {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#header-text {
+
+}
+
+.status-text {
+    display: inline;
+    text-align: center;
+    border: 2px solid #175423;
+    padding: 0px 13px 0px 13px;
+    border-radius: 5px;
+    background-color: #b3ec9d;
+    line-height: 80%;
+    color: #106a10;
+}
+
+#header {
+    align-items: unset;
+    justify-content: unset;
+    text-align: unset;
+    height: 800px;
+    position: relative;
+    /* left:-5.6%; */
+    z-index: 100;
+    width: 800px;
+    padding: 0;
+
+}
+
+.left {
+    align-items: unset;
+    justify-content: unset;
+    text-align: left;
+    left: 0;
+    position: absolute;
+}
