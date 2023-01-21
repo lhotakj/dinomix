@@ -116,3 +116,13 @@ h1 {
     left: 0;
     position: absolute;
 }
+
+#dino {
+    z-index: 1000;
+}
+
+.hit {
+    background-color: SlateGray;
+    -webkit-opacity: 20%;
+    opacity: 0.20;
+}

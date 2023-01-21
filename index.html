@@ -18,6 +18,8 @@
             let maxEggs = 10;
             let delayBetweenMeteorites = 500;
             let delayBetweenEggs = 2000;
+            let dinoPositionX = 0;
+            let meteoritePositionX = 0;
 
             function sleep(ms) {
                 return new Promise(resolve => setTimeout(resolve, ms));
@@ -27,6 +29,13 @@
                 let top = $(object).css('top');
                 let top1 = parseInt(top.replace("px", ""));
                 $(object).css('top', top1 + 5 + "px");
+
+                if (top1 > 500) {
+                    if ((dinoPositionX >= (meteoritePositionX -10)) && (dinoPositionX <= (meteoritePositionX +10))) {
+                        $('#dino').css('filter', 'opacity(0.5) drop-shadow(0 0 0 red)');
+                        console.log('hit')
+                    }
+                }
                 if (top1 > 530) {
                     let impact = $(object).position().left - 25;
                     let uniqueTimestamp = Math.round(+new Date() / 1000).toString();
@@ -39,7 +48,6 @@
 
                     $(object).remove();
                     clearInterval(process);
-
 
                     if (counterMeteorites < maxMeteorites) {
                         sleep(delayBetweenMeteorites).then(() => {
@@ -89,6 +97,7 @@
             function meteoriteFall() {
                 counterMeteorites++;
                 let pos = Math.floor(Math.random() * 1060) + 20;
+                meteoritePositionX = pos
                 $("#canvas").append("<img src=\"./meteor-green.png\" style=\"left:" + pos + "px; top:0px; width: 70px; position: absolute\" id=\"meteorit\" name=\"meteorit\" />");
                 let meteoriteProcess = setInterval(function () {
                     let d = performMeteoriteFall('#meteorit', meteoriteProcess);
@@ -110,12 +119,16 @@
                     case 37:
                         let left = $('#dino').css('left');
                         let left1 = parseInt(left.replace("px", ""));
+                        if (left1 <= 5) { break}
                         $('#dino').css('left', left1 - 15 + "px");
+                        dinoPositionX = left1;
                         break;
                     case 39:
                         let right = $('#dino').css('left');
                         let right1 = parseInt(right.replace("px", ""));
+                        if (right1 >= 950) { break}
                         $('#dino').css('left', right1 + 15 + "px");
+                        dinoPositionX = right1;
                         break;
                 }
             };
