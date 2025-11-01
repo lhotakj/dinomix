@@ -7,6 +7,24 @@
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script>
 
+        function updateDatabase(userName, updateData) {
+            $.ajax({
+                url: 'https://9enfj7en82.execute-api.eu-central-1.amazonaws.com/dinomix/update', // Replace with your API Gateway endpoint
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    user_id: userName,
+                    prop: updateData
+                }),
+                success: function(response) {
+                    console.log('Lambda response:', response);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Lambda call failed:', error);
+                }
+            });
+        }
+
         $(function () {
 
             let speedEgg = 50;
@@ -69,6 +87,7 @@
                         // caught
                         $(object).remove();
                         counterSavedEggs++;
+                        updateDatabase("dino_god67", {"eggsSaved": counterSavedEggs})
                         $('#status-2').text("Eggs saved: " + counterSavedEggs);
                     } else {
 
