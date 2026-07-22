@@ -29,6 +29,7 @@
 
             let speedEgg = 50;
             let speedMeteorite = 20;
+            let meteoriteFallStep = 5;
             let counterMeteorites = 0;
             let counterEggs = 0;
             let counterSavedEggs = 0;
@@ -45,10 +46,15 @@
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
 
+            function updateStatus() {
+                $('#status-1').text("Eggs: " + counterEggs + "/" + maxEggs);
+                $('#status-2').text("Eggs saved: " + counterSavedEggs + " | Meteor speed: " + meteoriteFallStep);
+            }
+
             function performMeteoriteFall(object, process) {
                 let top = $(object).css('top');
                 let top1 = parseInt(top.replace("px", ""));
-                $(object).css('top', top1 + 5 + "px");
+                $(object).css('top', top1 + meteoriteFallStep + "px");
 
                 if (top1 > 500) {
                     if ((dinoPositionX >= (meteoritePositionX -10)) && (dinoPositionX <= (meteoritePositionX +10))) {
@@ -78,7 +84,6 @@
             }
 
             function performEggFall(object, process) {
-                $('#status-1').text("Eggs: " + counterEggs + "/" + maxEggs);
                 let top = $(object).css('top');
                 let top1 = parseInt(top.replace("px", ""));
                 $(object).css('top', top1 + 6 + "px");
@@ -90,7 +95,7 @@
                         $(object).remove();
                         counterSavedEggs++;
                         updateDatabase("dino_god67", {"eggsSaved": counterSavedEggs})
-                        $('#status-2').text("Eggs saved: " + counterSavedEggs);
+                        updateStatus();
                     } else {
 
                         // break
@@ -127,6 +132,7 @@
 
             function eggFall() {
                 counterEggs++;
+                updateStatus();
                 let pos = Math.floor(Math.random() * 1060) + 20;
                 $("#canvas").append("<img src=\"./egg-white-1.png\" style=\"left:" + pos + "px; top:0px; width: 74px; position: absolute\" id=\"egg\" name=\"egg\" />");
                 let eggProcess = setInterval(function () {
@@ -158,6 +164,11 @@
                 }
             };
 
+            updateStatus();
+            setInterval(function () {
+                meteoriteFallStep = Math.min(30, meteoriteFallStep + 2);
+                updateStatus();
+            }, 5000);
             meteoriteFall();
             eggFall();
 
