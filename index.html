@@ -38,6 +38,8 @@
             let delayBetweenEggs = 2000;
             let dinoPositionX = 0;
             let meteoritePositionX = 0;
+            const DINO_FACE_LEFT = 'scaleX(1)';
+            const DINO_FACE_RIGHT = 'scaleX(-1)';
 
             function sleep(ms) {
                 return new Promise(resolve => setTimeout(resolve, ms));
@@ -139,15 +141,19 @@
                         let left = $('#dino').css('left');
                         let left1 = parseInt(left.replace("px", ""));
                         if (left1 <= 5) { break}
-                        $('#dino').css('left', left1 - 15 + "px");
-                        dinoPositionX = left1;
+                        let nextLeft = left1 - 15;
+                        $('#dino').css('left', nextLeft + "px");
+                        $('#dino').css('transform', DINO_FACE_LEFT);
+                        dinoPositionX = nextLeft;
                         break;
                     case 39:
                         let right = $('#dino').css('left');
                         let right1 = parseInt(right.replace("px", ""));
                         if (right1 >= 950) { break}
-                        $('#dino').css('left', right1 + 15 + "px");
-                        dinoPositionX = right1;
+                        let nextRight = right1 + 15;
+                        $('#dino').css('left', nextRight + "px");
+                        $('#dino').css('transform', DINO_FACE_RIGHT);
+                        dinoPositionX = nextRight;
                         break;
                 }
             };
