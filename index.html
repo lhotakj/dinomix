@@ -167,7 +167,9 @@
                 $(object).css('top', top1 + meteoriteFallStep + "px");
 
                 if (top1 > 500) {
-                    if ((meteoritePositionX < dinoPositionX + 120) && (meteoritePositionX + 70 > dinoPositionX)) {
+                    let meteorLeft = meteoritePositionX + 8;
+                    let meteorRight = meteoritePositionX + 70 - 8;
+                    if ((meteorLeft < dinoPositionX + 120) && (meteorRight > dinoPositionX)) {
                         $('#dino').css('filter', 'opacity(0.5) drop-shadow(0 0 0 red)');
                         console.log('hit')
                     }
