@@ -40,12 +40,119 @@
             let delayBetweenEggs = 2000;
             let dinoPositionX = 0;
             let meteoritePositionX = 0;
+            let maxMeteorSpeed = 30;
+            let tundraActive = false;
             const DINO_FACE_LEFT = 'scaleX(1)';
             const DINO_FACE_RIGHT = 'scaleX(-1)';
 
             function sleep(ms) {
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
+
+            function activateTundra() {
+                if (tundraActive) return;
+                tundraActive = true;
+
+                // Frosty tundra visuals
+                $('#canvas').css('background-image', 'url("./background-tundra.png")');
+                startSnow();
+                $('#canvas').append('<div id="tundra-banner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:bold;color:#F0F8FF;text-shadow:0 0 20px #00aaff,0 0 40px #0055ff;z-index:999;pointer-events:none;text-align:center;">❄️ Frosty Tundra ❄️<br/><span style="font-size:24px;">More eggs incoming!</span></div>');
+                sleep(3000).then(() => {
+                    $('#tundra-banner').fadeOut(600, function () { $(this).remove(); });
+                });
+
+                // Raise limits
+                maxMeteorSpeed = 45;
+                maxEggs += 15;
+
+                updateStatus();
+
+                // Kick off the next wave of eggs
+                sleep(delayBetweenEggs).then(() => eggFall());
+            }
+
+            let snowInterval = null;
+
+            function initSnowGround() {
+                if ($('#snow-ground').length) return;
+                $('#canvas').append('<canvas id="snow-ground" style="position:absolute;bottom:0;left:0;z-index:997;pointer-events:none;"></canvas>');
+                const c = document.getElementById('snow-ground');
+                c.width = 1152;
+                c.height = 80;
+            }
+
+            function addSnowToGround(x) {
+                const c = document.getElementById('snow-ground');
+                if (!c) return;
+                const ctx = c.getContext('2d');
+                // Each landed flake adds a soft white blob, slowly building up a pile
+                const radius = Math.random() * 7 + 4;
+                ctx.beginPath();
+                ctx.ellipse(x, c.height, radius, radius * 0.55, 0, Math.PI, 0);
+                ctx.fillStyle = 'rgba(255,255,255,0.75)';
+                ctx.fill();
+            }
+
+            function clearSnowGround() {
+                const c = document.getElementById('snow-ground');
+                if (c) {
+                    c.getContext('2d').clearRect(0, 0, c.width, c.height);
+                    $(c).remove();
+                }
+            }
+
+            function startSnow() {
+                initSnowGround();
+                const flakes = ['❄', '❅', '❆', '·', '•'];
+                snowInterval = setInterval(function () {
+                    let left = Math.random() * 1130;
+                    let size = Math.floor(Math.random() * 16) + 8;
+                    let duration = Math.random() * 4 + 3;
+                    let flake = flakes[Math.floor(Math.random() * flakes.length)];
+                    let id = 'sf' + Date.now() + Math.random().toString(36).slice(2);
+                    $('#canvas').append(
+                        '<span id="' + id + '" class="snowflake" style="left:' + left + 'px;font-size:' + size + 'px;animation-duration:' + duration + 's;">' + flake + '</span>'
+                    );
+                    // Final x drifts by -10px per the CSS animation end keyframe
+                    setTimeout(function () {
+                        addSnowToGround(left - 10);
+                        $('#' + id).remove();
+                    }, duration * 1000);
+                }, 150);
+            }
+
+            function stopSnow() {
+                clearInterval(snowInterval);
+                snowInterval = null;
+                $('.snowflake').remove();
+                clearSnowGround();
+            }
+
+            function applyTundraVisuals() {
+                tundraActive = true;
+                $('#canvas').css('background-image', 'url("./background-tundra.png")');
+                startSnow();
+            }
+
+            function removeTundraVisuals() {
+                tundraActive = false;
+                $('#canvas').css('background-image', 'url("./background.jpg")');
+                stopSnow();
+            }
+
+            // Secret cheat code listener
+            let cheatBuffer = '';
+            document.addEventListener('keypress', function (e) {
+                cheatBuffer += e.key;
+                if (cheatBuffer.length > 6) cheatBuffer = cheatBuffer.slice(-6);
+                if (cheatBuffer.endsWith('tundra')) {
+                    cheatBuffer = '';
+                    applyTundraVisuals();
+                } else if (cheatBuffer.endsWith('back')) {
+                    cheatBuffer = '';
+                    removeTundraVisuals();
+                }
+            });
 
             function updateStatus() {
                 $('#status-1').text("Eggs: " + counterEggs + "/" + maxEggs);
@@ -60,7 +167,7 @@
                 $(object).css('top', top1 + meteoriteFallStep + "px");
 
                 if (top1 > 500) {
-                    if ((dinoPositionX >= (meteoritePositionX -10)) && (dinoPositionX <= (meteoritePositionX +10))) {
+                    if ((meteoritePositionX < dinoPositionX + 120) && (meteoritePositionX + 70 > dinoPositionX)) {
                         $('#dino').css('filter', 'opacity(0.5) drop-shadow(0 0 0 red)');
                         console.log('hit')
                     }
@@ -93,12 +200,19 @@
                 if (top1 > 550) {
                     clearInterval(process);
 
-                    if (($(object).position().left > $('#dino').position().left) && ($(object).position().left + 20 < $('#dino').position().left + 120)) {
+                    let eggX = $(object).position().left;
+                    let dinoX = $('#dino').position().left;
+                    // overlap collision (same logic as meteorite): egg width is 74px, dino width is 120px
+                    if ((eggX < dinoX + 120) && (eggX + 74 > dinoX)) {
                         // caught
                         $(object).remove();
                         counterSavedEggs++;
-                        updateDatabase("dino_god67", {"eggsSaved": counterSavedEggs})
+                        updateDatabase("dino_god67", {"eggsSaved": counterSavedEggs});
                         updateStatus();
+                        if (counterSavedEggs >= maxEggs && !tundraActive) {
+                            activateTundra();
+                            return;
+                        }
                     } else {
 
                         // break
@@ -174,7 +288,7 @@
 
             updateStatus();
             setInterval(function () {
-                meteoriteFallStep = Math.min(30, meteoriteFallStep + 2);
+                meteoriteFallStep = Math.min(maxMeteorSpeed, meteoriteFallStep + 2);
                 updateStatus();
             }, 5000);
             meteoriteFall();
