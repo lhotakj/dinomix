@@ -49,7 +49,8 @@
 
             function updateStatus() {
                 $('#status-1').text("Eggs: " + counterEggs + "/" + maxEggs);
-                $('#status-2').text("Eggs saved: " + counterSavedEggs + " | Meteor speed: " + meteoriteFallStep);
+                $('#status-2').text("Eggs saved: " + counterSavedEggs);
+                $('#status-4').text("Meteor speed: " + meteoriteFallStep);
                 $('#status-3').text("Golden eggs: " + counterGoldenEggs);
             }
 
@@ -202,6 +203,9 @@
             </div>
             <div class="status-text" id="status-2">
                 Eggs saved: 0
+            </div>
+            <div class="status-text" id="status-4">
+                Meteor speed: 0
             </div>
             <div class="status-text" id="status-3">
                 Golden eggs: 0
