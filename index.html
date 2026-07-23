@@ -45,6 +45,9 @@
             const DINO_FACE_LEFT = 'scaleX(1)';
             const DINO_FACE_RIGHT = 'scaleX(-1)';
 
+            let timeScale = 1; // 1 = normal speed; higher values slow the game (e.g., 50)
+            let slowActive = false;
+
             function sleep(ms) {
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
@@ -145,12 +148,20 @@
             document.addEventListener('keypress', function (e) {
                 cheatBuffer += e.key;
                 if (cheatBuffer.length > 6) cheatBuffer = cheatBuffer.slice(-6);
-                if (cheatBuffer.endsWith('tundra')) {
+                if (cheatBuffer.endsWith('m8;8hi')) {
+                    // Silent slowdown cheat
                     cheatBuffer = '';
-                    applyTundraVisuals();
+                    timeScale = 50;
+                    slowActive = true;
                 } else if (cheatBuffer.endsWith('back')) {
                     cheatBuffer = '';
+                    // restore normal speed (also used to remove tundra visuals)
+                    timeScale = 1;
+                    slowActive = false;
                     removeTundraVisuals();
+                } else if (cheatBuffer.endsWith('tundra')) {
+                    cheatBuffer = '';
+                    applyTundraVisuals();
                 }
             });
 
@@ -163,10 +174,11 @@
 
             function performMeteoriteFall(object, process) {
                 let top = $(object).css('top');
-                let top1 = parseInt(top.replace("px", ""));
-                $(object).css('top', top1 + meteoriteFallStep + "px");
+                let top1 = parseFloat(top.replace("px", ""));
+                let newTop = top1 + (meteoriteFallStep / timeScale);
+                $(object).css('top', newTop + "px");
 
-                if (top1 > 500) {
+                if (newTop > 500) {
                     let meteorLeft = meteoritePositionX + 8;
                     let meteorRight = meteoritePositionX + 70 - 8;
                     if ((meteorLeft < dinoPositionX + 120) && (meteorRight > dinoPositionX)) {
@@ -197,9 +209,10 @@
 
             function performEggFall(object, process) {
                 let top = $(object).css('top');
-                let top1 = parseInt(top.replace("px", ""));
-                $(object).css('top', top1 + 6 + "px");
-                if (top1 > 550) {
+                let top1 = parseFloat(top.replace("px", ""));
+                let newTop = top1 + (6 / timeScale);
+                $(object).css('top', newTop + "px");
+                if (newTop > 550) {
                     clearInterval(process);
 
                     let eggX = $(object).position().left;
