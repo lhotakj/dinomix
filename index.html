@@ -27,21 +27,78 @@
 
         $(function () {
 
+            const BIOMES = [
+                {
+                    id: 'plain',
+                    name: 'Forest',
+                    subtitle: 'A wild adventure awaits!',
+                    background: './background.jpg',
+                    maxMeteorSpeed: 30,
+                    eggsToUnlock: 10,
+                    meteoriteImage: './meteor-green.png',
+                    bannerColor: '#eaffd7',
+                    bannerShadow: '0 0 20px #62c82e, 0 0 40px #1d6b24'
+                },
+                {
+                    id: 'tundra',
+                    name: 'Frosty Tundra',
+                    subtitle: 'More eggs incoming!',
+                    background: './background-tundra.png',
+                    maxMeteorSpeed: 45,
+                    eggsToUnlock: 15,
+                    meteoriteImage: './meteor-blue.png',
+                    iceEffects: true,
+                    snow: true,
+                    bannerColor: '#F0F8FF',
+                    bannerShadow: '0 0 20px #00aaff, 0 0 40px #0055ff'
+                },
+                {
+                    id: 'volcano',
+                    name: 'Volcano',
+                    subtitle: 'Hot and fiery!',
+                    background: './background-volcano.png',
+                    maxMeteorSpeed: 60,
+                    eggsToUnlock: 20,
+                    meteoriteImage: './meteor-red.png',
+                    burningDust: true,
+                    bannerColor: '#961A2F',
+                    bannerShadow: '0 0 20px #FF6347, 0 0 40px #FF0000'
+                }
+            ];
+            const DEFAULT_METEORITE_FALL_STEP = 5;
+            const GAME_WIDTH = 1152;
+            const GAME_HEIGHT = 648;
+            const STATUS_HEIGHT = 72;
+            const DINO_WIDTH = 200;
+            const EGG_WIDTH = 74;
+            const METEOR_WIDTH = 70;
+            const SAFE_FALL_DISTANCE = DINO_WIDTH + Math.max(EGG_WIDTH, METEOR_WIDTH) + 10;
+            const FALLING_OBJECT_MARGIN = 20;
+
             let speedEgg = 50;
             let speedMeteorite = 20;
-            let meteoriteFallStep = 5;
+            let meteoriteFallStep = DEFAULT_METEORITE_FALL_STEP;
             let counterMeteorites = 0;
             let counterEggs = 0;
             let counterSavedEggs = 0;
+            let totalSavedEggs = 0;
             let counterGoldenEggs = 0;
             let maxMeteorites = 100;
-            let maxEggs = 10;
+            let currentBiomeIndex = 0;
+            let maxEggs = BIOMES[0].eggsToUnlock;
+            let eggProcess = null;
+            let eggSpawnTimer = null;
             let delayBetweenMeteorites = 500;
             let delayBetweenEggs = 2000;
-            let dinoPositionX = 0;
             let meteoritePositionX = 0;
-            let maxMeteorSpeed = 30;
-            let tundraActive = false;
+            let meteoriteActive = false;
+            let eggPositionX = null;
+            let maxMeteorSpeed = BIOMES[0].maxMeteorSpeed;
+            let gameRunning = true;
+            let gamePaused = false;
+            let gameTimers = new Set();
+            let eggInFlight = false;
+            let eggSpawnScheduled = false;
             const DINO_FACE_LEFT = 'scaleX(1)';
             const DINO_FACE_RIGHT = 'scaleX(-1)';
 
@@ -49,29 +106,257 @@
             let slowActive = false;
 
             function sleep(ms) {
-                return new Promise(resolve => setTimeout(resolve, ms));
+                return new Promise(resolve => {
+                    let timer = setTimeout(function () {
+                        gameTimers.delete(timer);
+                        resolve();
+                    }, ms);
+                    gameTimers.add(timer);
+                });
             }
 
-            function activateTundra() {
-                if (tundraActive) return;
-                tundraActive = true;
+            function gameInterval(callback, delay) {
+                let timer = setInterval(function () {
+                    if (gameRunning && !gamePaused) callback();
+                }, delay);
+                gameTimers.add(timer);
+                return timer;
+            }
 
-                // Frosty tundra visuals
-                $('#canvas').css('background-image', 'url("./background-tundra.png")');
-                startSnow();
-                $('#canvas').append('<div id="tundra-banner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:bold;color:#F0F8FF;text-shadow:0 0 20px #00aaff,0 0 40px #0055ff;z-index:999;pointer-events:none;text-align:center;">❄️ Frosty Tundra ❄️<br/><span style="font-size:24px;">More eggs incoming!</span></div>');
-                sleep(3000).then(() => {
-                    $('#tundra-banner').fadeOut(600, function () { $(this).remove(); });
+            function clearGameTimers() {
+                gameTimers.forEach(function (timer) {
+                    clearTimeout(timer);
+                    clearInterval(timer);
                 });
+                gameTimers.clear();
+            }
 
-                // Raise limits
-                maxMeteorSpeed = 45;
-                maxEggs += 15;
+            function centerGameStage() {
+                let scale = Math.min(
+                    1,
+                    window.innerWidth / GAME_WIDTH,
+                    window.innerHeight / (GAME_HEIGHT + 2 * STATUS_HEIGHT)
+                );
+                $('.center-screen').css('--game-scale', scale);
+            }
 
+            function randomFallPosition(objectWidth, avoidPosition) {
+                const min = FALLING_OBJECT_MARGIN;
+                const max = GAME_WIDTH - objectWidth - FALLING_OBJECT_MARGIN;
+                if (avoidPosition === null) {
+                    return Math.floor(Math.random() * (max - min + 1)) + min;
+                }
+
+                for (let attempt = 0; attempt < 100; attempt++) {
+                    const position = Math.floor(Math.random() * (max - min + 1)) + min;
+                    if (Math.abs(position - avoidPosition) >= SAFE_FALL_DISTANCE) return position;
+                }
+
+                return Math.abs(min - avoidPosition) >= Math.abs(max - avoidPosition) ? min : max;
+            }
+
+            function elementsTouch(first, second) {
+                const a = first.getBoundingClientRect();
+                const b = second.getBoundingClientRect();
+                return a.left <= b.right && a.right >= b.left
+                    && a.top <= b.bottom && a.bottom >= b.top;
+            }
+
+            function glowDinosaurOnCatch() {
+                const dinosaur = document.getElementById('dino');
+                dinosaur.classList.remove('dino-caught');
+                void dinosaur.offsetWidth;
+                dinosaur.classList.add('dino-caught');
+            }
+
+            function endGame() {
+                if (!gameRunning) return;
+                gameRunning = false;
+                clearGameTimers();
+                $('#game-over').css('display', 'flex');
+            }
+
+            function clearEggSpawner() {
+                if (eggProcess) {
+                    clearInterval(eggProcess);
+                    gameTimers.delete(eggProcess);
+                    eggProcess = null;
+                }
+                if (eggSpawnTimer) {
+                    clearTimeout(eggSpawnTimer);
+                    gameTimers.delete(eggSpawnTimer);
+                    eggSpawnTimer = null;
+                }
+                $('#canvas img[name="egg"]').remove();
+                eggInFlight = false;
+                eggSpawnScheduled = false;
+                eggPositionX = null;
+            }
+
+            function startGame() {
+                clearGameTimers();
+                clearEggSpawner();
+                gameRunning = true;
+                speedEgg = 50;
+                speedMeteorite = 20;
+                meteoriteFallStep = DEFAULT_METEORITE_FALL_STEP;
+                counterMeteorites = 0;
+                counterEggs = 0;
+                counterSavedEggs = 0;
+                totalSavedEggs = 0;
+                counterGoldenEggs = 0;
+                maxMeteorites = 100;
+                currentBiomeIndex = 0;
+                maxEggs = BIOMES[0].eggsToUnlock;
+                delayBetweenMeteorites = 500;
+                delayBetweenEggs = 2000;
+                meteoritePositionX = 0;
+                meteoriteActive = false;
+                eggPositionX = null;
+                maxMeteorSpeed = BIOMES[0].maxMeteorSpeed;
+                timeScale = 1;
+                slowActive = false;
+                gamePaused = true;
+                eggInFlight = false;
+                eggSpawnScheduled = false;
+                stopSnow();
+                applyBiomeVisuals();
+                $('#canvas').empty().append('<img src="./dino1.png" style="left:950px; top:480px; position:absolute" id="dino" name="dino"/>');
+                $('#game-over').hide();
                 updateStatus();
+                showBiomeBanner(getCurrentBiome());
+                gameInterval(function () {
+                    meteoriteFallStep = Math.min(maxMeteorSpeed, meteoriteFallStep + 2);
+                    updateStatus();
+                }, 5000);
+                showCountdown().then(function () {
+                    if (!gameRunning) return;
+                    gamePaused = false;
+                    meteoriteFall();
+                    eggFall();
+                });
+            }
 
-                // Kick off the next wave of eggs
-                sleep(delayBetweenEggs).then(() => eggFall());
+            function resetMeteoriteSpeed() {
+                meteoriteFallStep = DEFAULT_METEORITE_FALL_STEP;
+            }
+
+            function getCurrentBiome() {
+                return BIOMES[currentBiomeIndex];
+            }
+
+            function applyBiomeVisuals() {
+                const biome = getCurrentBiome();
+                $('#canvas').css('background-image', 'url("' + biome.background + '")');
+                $('#canvas').css('background-repeat', 'no-repeat');
+                $('#canvas').css('background-size', 'contain, cover');
+                $('#canvas').toggleClass('ice-biome', Boolean(biome.iceEffects));
+                $('#meteorit').attr('src', biome.meteoriteImage || './meteor-green.png');
+                if (biome.snow) {
+                    if (!snowInterval) startSnow();
+                } else {
+                    stopSnow();
+                }
+                if (biome.burningDust) {
+                    if (!volcanoDustInterval) startVolcanoDust();
+                } else {
+                    stopVolcanoDust();
+                }
+            }
+
+            function showBiomeBanner(biome) {
+                if (!biome.name) return;
+                $('#biome-banner').remove();
+                const banner = $('<div>', {id: 'biome-banner'}).css({
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    fontSize: '48px',
+                    fontWeight: 'bold',
+                    color: biome.bannerColor || '#fff',
+                    textShadow: biome.bannerShadow || '0 0 20px rgba(255, 255, 255, 0.8)',
+                    zIndex: 999,
+                    pointerEvents: 'none',
+                    textAlign: 'center'
+                }).text(biome.name);
+                if (biome.subtitle) {
+                    banner.append('<br/>').append(
+                        $('<span>').css('font-size', '24px').text(biome.subtitle)
+                    );
+                }
+                $('#canvas').append(banner);
+                sleep(3000).then(() => {
+                    banner.fadeOut(600, function () { $(this).remove(); });
+                });
+            }
+
+            function showCountdown() {
+                gamePaused = true;
+                return new Promise(function (resolve) {
+                    let number = 3;
+                    function showNextNumber() {
+                        const countdown = $('<div>', {id: 'biome-countdown', class: 'biome-countdown'}).text(number);
+                        $('#biome-countdown').remove();
+                        $('#canvas').append(countdown);
+                        sleep(1000).then(function () {
+                            countdown.remove();
+                            if (number === 1) {
+                                gamePaused = false;
+                                resolve();
+                                return;
+                            }
+                            number--;
+                            showNextNumber();
+                        });
+                    }
+                    showNextNumber();
+                });
+            }
+
+            function advanceToNextBiome() {
+                if (currentBiomeIndex >= BIOMES.length - 1) return false;
+                clearEggSpawner();
+                meteoriteActive = Boolean($('#meteorit').length);
+                currentBiomeIndex++;
+                const biome = getCurrentBiome();
+                counterMeteorites = 0;
+                counterEggs = 0;
+                counterSavedEggs = 0;
+                counterGoldenEggs = 0;
+                maxMeteorites = 100;
+                maxEggs = biome.eggsToUnlock;
+                maxMeteorSpeed = biome.maxMeteorSpeed;
+                resetMeteoriteSpeed();
+                applyBiomeVisuals();
+                showBiomeBanner(biome);
+                updateStatus();
+                showCountdown().then(function () {
+                    if (!gameRunning) return;
+                    gamePaused = false;
+                    eggFall();
+                });
+                return true;
+            }
+
+            function completeLevelWithCheat() {
+                if (currentBiomeIndex >= BIOMES.length - 1) return;
+                totalSavedEggs += Math.max(0, maxEggs - counterSavedEggs);
+                counterSavedEggs = Math.max(counterSavedEggs, maxEggs);
+                updateDatabase("dino_god67", {"eggsSaved": totalSavedEggs});
+                advanceToNextBiome();
+            }
+
+            function scheduleEggFall(delay) {
+                if (eggInFlight || eggSpawnScheduled) return;
+                eggSpawnScheduled = true;
+                eggSpawnTimer = setTimeout(function () {
+                    gameTimers.delete(eggSpawnTimer);
+                    eggSpawnTimer = null;
+                    eggSpawnScheduled = false;
+                    if (gameRunning && counterEggs < maxEggs) eggFall();
+                }, delay);
+                gameTimers.add(eggSpawnTimer);
             }
 
             let snowInterval = null;
@@ -106,62 +391,89 @@
 
             function startSnow() {
                 initSnowGround();
-                const flakes = ['❄', '❅', '❆', '·', '•'];
-                snowInterval = setInterval(function () {
+                snowInterval = gameInterval(function () {
                     let left = Math.random() * 1130;
                     let size = Math.floor(Math.random() * 16) + 8;
                     let duration = Math.random() * 4 + 3;
-                    let flake = flakes[Math.floor(Math.random() * flakes.length)];
+                    let drift = Math.floor(Math.random() * 41) - 20;
                     let id = 'sf' + Date.now() + Math.random().toString(36).slice(2);
                     $('#canvas').append(
-                        '<span id="' + id + '" class="snowflake" style="left:' + left + 'px;font-size:' + size + 'px;animation-duration:' + duration + 's;">' + flake + '</span>'
+                        '<span id="' + id + '" class="snowflake" style="left:' + left + 'px;width:' + size + 'px;height:' + size + 'px;--snow-drift:' + drift + 'px;animation-duration:' + duration + 's;"></span>'
                     );
-                    // Final x drifts by -10px per the CSS animation end keyframe
-                    setTimeout(function () {
-                        addSnowToGround(left - 10);
+                    let timer = setTimeout(function () {
+                        gameTimers.delete(timer);
+                        addSnowToGround(left + drift);
                         $('#' + id).remove();
                     }, duration * 1000);
+                    gameTimers.add(timer);
                 }, 150);
             }
 
             function stopSnow() {
-                clearInterval(snowInterval);
+                if (snowInterval) {
+                    clearInterval(snowInterval);
+                    gameTimers.delete(snowInterval);
+                }
                 snowInterval = null;
                 $('.snowflake').remove();
                 clearSnowGround();
             }
 
-            function applyTundraVisuals() {
-                tundraActive = true;
-                $('#canvas').css('background-image', 'url("./background-tundra.png")');
-                startSnow();
+            let volcanoDustInterval = null;
+
+            function startVolcanoDust() {
+                volcanoDustInterval = gameInterval(function () {
+                    const left = Math.random() * GAME_WIDTH;
+                    const top = Math.random() * GAME_HEIGHT * 0.45;
+                    const size = Math.random() * 5 + 3;
+                    const duration = Math.random() * 4 + 3.5;
+                    const middleDrift = Math.floor(Math.random() * 261) - 130;
+                    const lateDrift = Math.floor(Math.random() * 261) - 130;
+                    const endDrift = middleDrift + Math.floor(Math.random() * 161) - 80;
+                    const id = 'vd' + Date.now() + Math.random().toString(36).slice(2);
+                    $('#canvas').append(
+                        '<span id="' + id + '" class="volcano-dust" style="left:' + left + 'px;top:' + top + 'px;width:' + size + 'px;height:' + size + 'px;--wind-mid:' + middleDrift + 'px;--wind-late:' + lateDrift + 'px;--wind-end:' + endDrift + 'px;animation-duration:' + duration + 's;"></span>'
+                    );
+                    const timer = setTimeout(function () {
+                        gameTimers.delete(timer);
+                        $('#' + id).remove();
+                    }, duration * 1000);
+                    gameTimers.add(timer);
+                }, 140);
             }
 
-            function removeTundraVisuals() {
-                tundraActive = false;
-                $('#canvas').css('background-image', 'url("./background.jpg")');
-                stopSnow();
+            function stopVolcanoDust() {
+                if (volcanoDustInterval) {
+                    clearInterval(volcanoDustInterval);
+                    gameTimers.delete(volcanoDustInterval);
+                }
+                volcanoDustInterval = null;
+                $('.volcano-dust').remove();
             }
 
             // Secret cheat code listener
             let cheatBuffer = '';
             document.addEventListener('keypress', function (e) {
-                cheatBuffer += e.key;
+                cheatBuffer += e.key.toLowerCase();
+                if (!gameRunning || gamePaused) return;
                 if (cheatBuffer.length > 6) cheatBuffer = cheatBuffer.slice(-6);
-                if (cheatBuffer.endsWith('m8;8hi')) {
+                if (cheatBuffer.endsWith('iddqd')) {
+                    cheatBuffer = '';
+                    completeLevelWithCheat();
+                } else if (cheatBuffer.endsWith('m8;8hi')) {
                     // Silent slowdown cheat
                     cheatBuffer = '';
                     timeScale = 50;
                     slowActive = true;
                 } else if (cheatBuffer.endsWith('back')) {
                     cheatBuffer = '';
-                    // restore normal speed (also used to remove tundra visuals)
+                    // Restore normal speed without changing the current biome.
                     timeScale = 1;
                     slowActive = false;
-                    removeTundraVisuals();
+                    applyBiomeVisuals();
                 } else if (cheatBuffer.endsWith('tundra')) {
                     cheatBuffer = '';
-                    applyTundraVisuals();
+                    completeLevelWithCheat();
                 }
             });
 
@@ -173,18 +485,18 @@
             }
 
             function performMeteoriteFall(object, process) {
+                if (!gameRunning || gamePaused) return;
                 let top = $(object).css('top');
                 let top1 = parseFloat(top.replace("px", ""));
                 let newTop = top1 + (meteoriteFallStep / timeScale);
                 $(object).css('top', newTop + "px");
 
-                if (newTop > 500) {
-                    let meteorLeft = meteoritePositionX + 8;
-                    let meteorRight = meteoritePositionX + 70 - 8;
-                    if ((meteorLeft < dinoPositionX + 120) && (meteorRight > dinoPositionX)) {
-                        $('#dino').css('filter', 'opacity(0.5) drop-shadow(0 0 0 red)');
-                        console.log('hit')
-                    }
+                const meteorite = $(object)[0];
+                const dinosaur = $('#dino')[0];
+                if (meteorite && dinosaur && elementsTouch(meteorite, dinosaur)) {
+                    $('#dino').css('filter', 'opacity(0.5) drop-shadow(0 0 0 red)');
+                    endGame();
+                    return;
                 }
                 if (top1 > 530) {
                     let impact = $(object).position().left - 25;
@@ -198,6 +510,8 @@
 
                     $(object).remove();
                     clearInterval(process);
+                    gameTimers.delete(process);
+                    meteoriteActive = false;
 
                     if (counterMeteorites < maxMeteorites) {
                         sleep(delayBetweenMeteorites).then(() => {
@@ -208,77 +522,88 @@
             }
 
             function performEggFall(object, process) {
+                if (!gameRunning || gamePaused) return;
                 let top = $(object).css('top');
                 let top1 = parseFloat(top.replace("px", ""));
                 let newTop = top1 + (6 / timeScale);
                 $(object).css('top', newTop + "px");
-                if (newTop > 550) {
+                const eggElement = $(object)[0];
+                const dinosaur = $('#dino')[0];
+                const caught = eggElement && dinosaur && elementsTouch(eggElement, dinosaur);
+                if (caught || newTop > 550) {
                     clearInterval(process);
+                    gameTimers.delete(process);
+                    if (eggProcess === process) eggProcess = null;
+                    eggInFlight = false;
+                    eggPositionX = null;
 
-                    let eggX = $(object).position().left;
-                    let dinoX = $('#dino').position().left;
-                    // overlap collision (same logic as meteorite): egg width is 74px, dino width is 120px
-                    if ((eggX < dinoX + 120) && (eggX + 74 > dinoX)) {
+                    if (caught) {
                         // caught
                         $(object).remove();
+                        glowDinosaurOnCatch();
                         counterSavedEggs++;
-                        updateDatabase("dino_god67", {"eggsSaved": counterSavedEggs});
+                        totalSavedEggs++;
+                        updateDatabase("dino_god67", {"eggsSaved": totalSavedEggs});
                         updateStatus();
-                        if (counterSavedEggs >= maxEggs && !tundraActive) {
-                            activateTundra();
+                        if (counterSavedEggs >= maxEggs) {
+                            advanceToNextBiome();
                             return;
                         }
                     } else {
 
                         // break
-                        $('#canvas').css('background', 'rgba(255, 0, 0, 0.25)').fadeIn(10);
+                        const biome = getCurrentBiome();
+                        const redTint = 'linear-gradient(rgba(255, 0, 0, 0.25), rgba(255, 0, 0, 0.25)), ';
+                        $('#canvas').css('background-image', redTint + 'url("' + biome.background + '")');
 
                         $(object).attr('src', 'egg-white-2.png');
                         sleep(50).then(() => {
                             $(object).attr('src', 'egg-white-3.png');
                         });
-                        sleep(50).then(() => {
-                            $('#canvas').css('background', 'url("./background.jpg")');
-                            $('#canvas').css('background-size', 'contain, cover');
-                        });
+                        sleep(50).then(() => applyBiomeVisuals());
+                        sleep(1000).then(() => $(object).remove());
                     }
                     if (counterEggs < maxEggs) {
-                        sleep(delayBetweenEggs).then(() => {
-                            $(object).remove();
-                            eggFall();
-                        });
+                        scheduleEggFall(delayBetweenEggs);
                     }
                 }
             }
 
 
             function meteoriteFall() {
+                if (!gameRunning || counterMeteorites >= maxMeteorites) return;
                 counterMeteorites++;
-                let pos = Math.floor(Math.random() * 1060) + 20;
+                let pos = randomFallPosition(METEOR_WIDTH, eggInFlight ? eggPositionX : null);
                 meteoritePositionX = pos
-                $("#canvas").append("<img src=\"./meteor-green.png\" style=\"left:" + pos + "px; top:0px; width: 70px; position: absolute\" id=\"meteorit\" name=\"meteorit\" />");
-                let meteoriteProcess = setInterval(function () {
+                meteoriteActive = true;
+                let meteoriteImage = getCurrentBiome().meteoriteImage || './meteor-green.png';
+                $("#canvas").append("<img src=\"" + meteoriteImage + "\" style=\"left:" + pos + "px; top:0px; width: 70px; position: absolute\" id=\"meteorit\" name=\"meteorit\" />");
+                let meteoriteProcess = gameInterval(function () {
                     let d = performMeteoriteFall('#meteorit', meteoriteProcess);
                 }, speedMeteorite);
             }
 
             function eggFall() {
+                if (!gameRunning || eggInFlight || counterEggs >= maxEggs) return;
+                eggInFlight = true;
                 counterEggs++;
                 let isGoldenEgg = (counterEggs % 5 === 0);
                 if (isGoldenEgg) {
                     counterGoldenEggs++;
                 }
                 updateStatus();
-                let pos = Math.floor(Math.random() * 1060) + 20;
+                let pos = randomFallPosition(EGG_WIDTH, meteoriteActive ? meteoritePositionX : null);
+                eggPositionX = pos;
                 let goldenClass = isGoldenEgg ? " class='golden-egg'" : "";
                 $("#canvas").append("<img src=\"./egg-white-1.png\" style=\"left:" + pos + "px; top:0px; width: 74px; position: absolute\" id=\"egg\" name=\"egg\"" + goldenClass + " />");
-                let eggProcess = setInterval(function () {
+                eggProcess = gameInterval(function () {
                     d = performEggFall('#egg', eggProcess);
                 }, speedEgg);
             }
 
 
             document.onkeydown = function (e) {
+                if (!gameRunning || gamePaused) return;
                 switch (e.keyCode) {
                     case 37:
                         let left = $('#dino').css('left');
@@ -287,7 +612,6 @@
                         let nextLeft = left1 - 15;
                         $('#dino').css('left', nextLeft + "px");
                         $('#dino').css('transform', DINO_FACE_LEFT);
-                        dinoPositionX = nextLeft;
                         break;
                     case 39:
                         let right = $('#dino').css('left');
@@ -296,18 +620,14 @@
                         let nextRight = right1 + 15;
                         $('#dino').css('left', nextRight + "px");
                         $('#dino').css('transform', DINO_FACE_RIGHT);
-                        dinoPositionX = nextRight;
                         break;
                 }
             };
 
-            updateStatus();
-            setInterval(function () {
-                meteoriteFallStep = Math.min(maxMeteorSpeed, meteoriteFallStep + 2);
-                updateStatus();
-            }, 5000);
-            meteoriteFall();
-            eggFall();
+            $('#respawn').on('click', startGame);
+            window.addEventListener('resize', centerGameStage);
+            centerGameStage();
+            startGame();
 
         });
 
@@ -348,6 +668,13 @@
         <img src="./dino1.png" style="left:950px; top:480px; position: absolute" id="dino" name="dino"/>
     </div>
 
+</div>
+
+<div id="game-over" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
+    <div class="game-over-content">
+        <h2 id="game-over-title">You have fallen</h2>
+        <button id="respawn" type="button">Respawn</button>
+    </div>
 </div>
 
 </html>

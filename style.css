@@ -59,6 +59,8 @@ fieldset {
 
 body {
     font-family: 'dinosaurregular';
+    margin: 0;
+    overflow: hidden;
 }
 
 h1 {
@@ -76,9 +78,15 @@ h1 {
 }
 
 .center-screen {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 1152px;
+    height: 648px;
+    display: block;
+    overflow: visible;
+    transform: translate(-50%, -50%) scale(var(--game-scale, 1));
+    transform-origin: center center;
 }
 
 #header-text {
@@ -97,24 +105,47 @@ h1 {
 }
 
 #header {
-    align-items: unset;
-    justify-content: unset;
-    text-align: unset;
-    height: 800px;
-    position: relative;
-    /* left:-5.6%; */
+    top: -72px;
+    left: 0;
+    height: auto;
+    position: absolute;
     z-index: 100;
-    width: 800px;
+    width: 100%;
     padding: 0;
+}
 
+#header h1 {
+    display: table;
+    margin: 0 auto 10px;
+}
+
+#canvas {
+    top: 0;
+    left: 0;
+    overflow: hidden;
+}
+
+.dino-caught {
+    animation: dino-catch-glow 1s ease-out;
+}
+
+@keyframes dino-catch-glow {
+    0%, 100% {
+        filter: brightness(1);
+    }
+    20%, 75% {
+        filter: brightness(1.2) drop-shadow(0 0 3px #71889e) drop-shadow(0 0 5px #a9c2da);
+    }
 }
 
 .left {
-    align-items: unset;
-    justify-content: unset;
-    text-align: left;
+    top: 46px;
     left: 0;
     position: absolute;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
 }
 
 #dino {
@@ -128,26 +159,123 @@ h1 {
 }
 
 .golden-egg {
-    filter: sepia(1) saturate(5) hue-rotate(350deg) brightness(1.15) contrast(1.05)
-        drop-shadow(0 0 4px rgba(255, 210, 80, 0.95))
-        drop-shadow(0 0 10px rgba(255, 255, 160, 0.8));
+    filter: drop-shadow(0 0 4px rgba(113, 136, 158, 0.95))
+        drop-shadow(0 0 10px rgba(113, 136, 158, 0.8));
     animation: golden-sparkle 0.85s ease-in-out infinite alternate;
 }
 
 @keyframes snowfall {
-    0%   { transform: translateY(-10px) translateX(0);   opacity: 0.9; }
-    50%  { transform: translateY(320px) translateX(18px); opacity: 0.7; }
-    100% { transform: translateY(650px) translateX(-10px); opacity: 0; }
+    0%   { transform: translateY(-10px) translateX(0); opacity: 0.9; }
+    50%  { transform: translateY(320px) translateX(0); opacity: 0.7; }
+    100% { transform: translateY(650px) translateX(var(--snow-drift)); opacity: 0; }
 }
 
 .snowflake {
     position: absolute;
     top: 0;
-    color: #fff;
+    display: block;
+    background:
+        linear-gradient(0deg, transparent 44%, #fff 45% 55%, transparent 56%),
+        linear-gradient(60deg, transparent 44%, #fff 45% 55%, transparent 56%),
+        linear-gradient(120deg, transparent 44%, #fff 45% 55%, transparent 56%);
     pointer-events: none;
     z-index: 998;
     animation: snowfall linear infinite;
     user-select: none;
+}
+
+@keyframes burning-dust-fall {
+    0%   { transform: translate(0, -20px) rotate(0deg); opacity: 0; }
+    12%  { opacity: 0.95; }
+    40%  { transform: translate(var(--wind-mid), 250px) rotate(110deg); opacity: 0.8; }
+    72%  { transform: translate(var(--wind-late), 470px) rotate(220deg); opacity: 0.65; }
+    100% { transform: translate(var(--wind-end), 680px) rotate(360deg); opacity: 0; }
+}
+
+.volcano-dust {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff5b5 0%, #ff7a19 45%, rgba(160, 25, 0, 0) 78%);
+    box-shadow: 0 0 5px rgba(255, 105, 0, 0.8);
+    pointer-events: none;
+    z-index: 998;
+    animation: burning-dust-fall linear forwards;
+}
+
+#game-over {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: #c62828;
+    color: #fff;
+    text-align: center;
+}
+
+.game-over-content h2 {
+    margin-bottom: 24px;
+    font-size: clamp(36px, 7vw, 72px);
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+#respawn {
+    border: 2px solid #fff;
+    border-radius: 8px;
+    padding: 12px 28px;
+    background: #fff;
+    color: #c62828;
+    font: inherit;
+    font-size: 24px;
+    transition: background-color 150ms ease, color 150ms ease;
+}
+
+#respawn:hover,
+#respawn:focus-visible {
+    background: transparent;
+    color: #fff;
+}
+
+.biome-countdown {
+    position: absolute;
+    top: 68%;
+    left: 50%;
+    z-index: 1000;
+    color: #fff;
+    font-size: 72px;
+    font-weight: bold;
+    line-height: 1;
+    pointer-events: none;
+    text-shadow: 0 0 12px rgba(0, 0, 0, 0.8), 0 0 24px rgba(255, 255, 255, 0.8);
+    transform: translate(-50%, -50%);
+    animation: biome-countdown-zoom 1s ease-in forwards;
+}
+
+#canvas.ice-biome #meteorit {
+    filter: drop-shadow(0 0 10px #74dcff) saturate(1.25);
+}
+
+#canvas.ice-biome img[id^="crater"] {
+    filter: drop-shadow(0 0 6px #5edfff);
+}
+
+@keyframes biome-countdown-zoom {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.35);
+    }
+    20% {
+        opacity: 1;
+    }
+    75% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1.7);
+    }
 }
     from {
         filter: sepia(1) saturate(5) hue-rotate(350deg) brightness(1.1) contrast(1.05)
