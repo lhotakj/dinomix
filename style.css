@@ -164,6 +164,34 @@ h1 {
     animation: golden-sparkle 0.85s ease-in-out infinite alternate;
 }
 
+.ice-egg {
+    filter: sepia(1) saturate(2.5) hue-rotate(155deg) brightness(1.15)
+        drop-shadow(0 0 6px #87eaff) drop-shadow(0 0 12px #d6faff);
+    animation: ice-egg-shimmer 0.85s ease-in-out infinite alternate;
+}
+
+@keyframes ice-egg-shimmer {
+    from { filter: sepia(1) saturate(2.2) hue-rotate(155deg) brightness(1.1) drop-shadow(0 0 4px #87eaff); }
+    to { filter: sepia(1) saturate(2.8) hue-rotate(155deg) brightness(1.2) drop-shadow(0 0 9px #d6faff); }
+}
+
+.frost-saurus-unlock {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 1200;
+    transform: translate(-50%, -50%);
+    padding: 18px 24px;
+    border: 2px solid #d6faff;
+    border-radius: 12px;
+    background: rgba(18, 73, 111, 0.94);
+    box-shadow: 0 0 18px #87eaff, 0 0 36px rgba(135, 234, 255, 0.7);
+    color: #effcff;
+    font-size: 26px;
+    text-align: center;
+    pointer-events: none;
+}
+
 @keyframes snowfall {
     0%   { transform: translateY(-10px) translateX(0); opacity: 0.9; }
     50%  { transform: translateY(320px) translateX(0); opacity: 0.7; }

@@ -45,10 +45,11 @@
                     subtitle: 'More eggs incoming!',
                     background: './background-tundra.png',
                     maxMeteorSpeed: 45,
-                    eggsToUnlock: 15,
+                    eggsToUnlock: 25,
                     meteoriteImage: './meteor-blue.png',
                     iceEffects: true,
                     snow: true,
+                    iceEggs: true,
                     bannerColor: '#F0F8FF',
                     bannerShadow: '0 0 20px #00aaff, 0 0 40px #0055ff'
                 },
@@ -72,6 +73,8 @@
             const DINO_WIDTH = 200;
             const EGG_WIDTH = 74;
             const METEOR_WIDTH = 70;
+            const ICE_EGGS_TO_UNLOCK = 5;
+            const FROST_SAURUS_STORAGE_KEY = 'dinomix.frostSaurusUnlocked';
             const SAFE_FALL_DISTANCE = DINO_WIDTH + Math.max(EGG_WIDTH, METEOR_WIDTH) + 10;
             const FALLING_OBJECT_MARGIN = 20;
 
@@ -83,6 +86,13 @@
             let counterSavedEggs = 0;
             let totalSavedEggs = 0;
             let counterGoldenEggs = 0;
+            let counterIceEggs = 0;
+            let frostSaurusUnlocked = false;
+            try {
+                frostSaurusUnlocked = window.localStorage.getItem(FROST_SAURUS_STORAGE_KEY) === 'true';
+            } catch (error) {
+                console.error('Could not load Frost-saurus unlock state:', error);
+            }
             let maxMeteorites = 100;
             let currentBiomeIndex = 0;
             let maxEggs = BIOMES[0].eggsToUnlock;
@@ -193,6 +203,32 @@
                 eggPositionX = null;
             }
 
+            function showFrostSaurusUnlockMessage() {
+                $('#frost-saurus-unlock').remove();
+                const message = $('<div>', {
+                    id: 'frost-saurus-unlock',
+                    class: 'frost-saurus-unlock'
+                }).text('Congrats, you have received the Frost-saurus skin');
+                $('#canvas').append(message);
+                const timer = setTimeout(function () {
+                    gameTimers.delete(timer);
+                    message.fadeOut(300, function () { $(this).remove(); });
+                }, 5000);
+                gameTimers.add(timer);
+            }
+
+            function unlockFrostSaurus() {
+                if (frostSaurusUnlocked) return;
+                frostSaurusUnlocked = true;
+                try {
+                    window.localStorage.setItem(FROST_SAURUS_STORAGE_KEY, 'true');
+                } catch (error) {
+                    console.error('Could not save Frost-saurus unlock state:', error);
+                }
+                $('#dino').attr('src', './dino-frost.png');
+                showFrostSaurusUnlockMessage();
+            }
+
             function startGame() {
                 clearGameTimers();
                 clearEggSpawner();
@@ -205,6 +241,7 @@
                 counterSavedEggs = 0;
                 totalSavedEggs = 0;
                 counterGoldenEggs = 0;
+                counterIceEggs = 0;
                 maxMeteorites = 100;
                 currentBiomeIndex = 0;
                 maxEggs = BIOMES[0].eggsToUnlock;
@@ -221,7 +258,8 @@
                 eggSpawnScheduled = false;
                 stopSnow();
                 applyBiomeVisuals();
-                $('#canvas').empty().append('<img src="./dino1.png" style="left:950px; top:480px; position:absolute" id="dino" name="dino"/>');
+                const dinosaurImage = frostSaurusUnlocked ? './dino-frost.png' : './dino1.png';
+                $('#canvas').empty().append('<img src="' + dinosaurImage + '" style="left:950px; top:480px; position:absolute" id="dino" name="dino"/>');
                 $('#game-over').hide();
                 updateStatus();
                 showBiomeBanner(getCurrentBiome());
@@ -324,6 +362,7 @@
                 counterEggs = 0;
                 counterSavedEggs = 0;
                 counterGoldenEggs = 0;
+                counterIceEggs = 0;
                 maxMeteorites = 100;
                 maxEggs = biome.eggsToUnlock;
                 maxMeteorSpeed = biome.maxMeteorSpeed;
@@ -481,7 +520,11 @@
                 $('#status-1').text("Eggs: " + counterEggs + "/" + maxEggs);
                 $('#status-2').text("Eggs saved: " + counterSavedEggs);
                 $('#status-4').text("Meteor speed: " + meteoriteFallStep);
-                $('#status-3').text("Golden eggs: " + counterGoldenEggs);
+                if (getCurrentBiome().iceEggs) {
+                    $('#status-3').text("Ice eggs: " + counterIceEggs + "/" + ICE_EGGS_TO_UNLOCK);
+                } else {
+                    $('#status-3').text("Golden eggs: " + counterGoldenEggs);
+                }
             }
 
             function performMeteoriteFall(object, process) {
@@ -530,6 +573,7 @@
                 const eggElement = $(object)[0];
                 const dinosaur = $('#dino')[0];
                 const caught = eggElement && dinosaur && elementsTouch(eggElement, dinosaur);
+                const caughtIceEgg = caught && eggElement.classList.contains('ice-egg');
                 if (caught || newTop > 550) {
                     clearInterval(process);
                     gameTimers.delete(process);
@@ -543,6 +587,12 @@
                         glowDinosaurOnCatch();
                         counterSavedEggs++;
                         totalSavedEggs++;
+                        if (caughtIceEgg) {
+                            counterIceEggs++;
+                            if (counterIceEggs >= ICE_EGGS_TO_UNLOCK) {
+                                unlockFrostSaurus();
+                            }
+                        }
                         updateDatabase("dino_god67", {"eggsSaved": totalSavedEggs});
                         updateStatus();
                         if (counterSavedEggs >= maxEggs) {
@@ -587,15 +637,19 @@
                 if (!gameRunning || eggInFlight || counterEggs >= maxEggs) return;
                 eggInFlight = true;
                 counterEggs++;
-                let isGoldenEgg = (counterEggs % 5 === 0);
+                const biome = getCurrentBiome();
+                const isSpecialEgg = counterEggs % 5 === 0;
+                const isIceEgg = isSpecialEgg && biome.iceEggs;
+                const isGoldenEgg = isSpecialEgg && !biome.iceEggs;
                 if (isGoldenEgg) {
                     counterGoldenEggs++;
                 }
                 updateStatus();
                 let pos = randomFallPosition(EGG_WIDTH, meteoriteActive ? meteoritePositionX : null);
                 eggPositionX = pos;
-                let goldenClass = isGoldenEgg ? " class='golden-egg'" : "";
-                $("#canvas").append("<img src=\"./egg-white-1.png\" style=\"left:" + pos + "px; top:0px; width: 74px; position: absolute\" id=\"egg\" name=\"egg\"" + goldenClass + " />");
+                const specialEggClass = isIceEgg ? "ice-egg" : (isGoldenEgg ? "golden-egg" : "");
+                const eggClass = specialEggClass ? " class='" + specialEggClass + "'" : "";
+                $("#canvas").append("<img src=\"./egg-white-1.png\" style=\"left:" + pos + "px; top:0px; width: 74px; position: absolute\" id=\"egg\" name=\"egg\"" + eggClass + " />");
                 eggProcess = gameInterval(function () {
                     d = performEggFall('#egg', eggProcess);
                 }, speedEgg);
