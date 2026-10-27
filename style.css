@@ -97,11 +97,24 @@ h1 {
     display: inline;
     text-align: center;
     border: 2px solid #175423;
-    padding: 0px 13px 0px 13px;
+    padding: 5px;
     border-radius: 5px;
     background-color: #b3ec9d;
     line-height: 80%;
     color: #106a10;
+}
+
+.status-highlight {
+    animation: status-counter-glow 1s ease-out;
+}
+
+@keyframes status-counter-glow {
+    0%, 100% {
+        box-shadow: none;
+    }
+    20%, 75% {
+        box-shadow: 0 0 12px 4px #fff176, 0 0 24px 8px rgba(255, 193, 7, 0.75);
+    }
 }
 
 #header {
@@ -126,14 +139,14 @@ h1 {
 }
 
 .dino-caught {
-    animation: dino-catch-glow 1s ease-out;
+    animation: dino-catch-glow 2s ease-out;
 }
 
 @keyframes dino-catch-glow {
     0%, 100% {
         filter: brightness(1);
     }
-    20%, 75% {
+    10%, 90% {
         filter: brightness(1.2) drop-shadow(0 0 3px #71889e) drop-shadow(0 0 5px #a9c2da);
     }
 }

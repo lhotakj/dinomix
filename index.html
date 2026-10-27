@@ -102,11 +102,15 @@
             let delayBetweenEggs = 2000;
             let meteoritePositionX = 0;
             let meteoriteActive = false;
+            let meteoriteProcess = null;
+            let meteoriteSpawnTimer = null;
             let eggPositionX = null;
             let maxMeteorSpeed = BIOMES[0].maxMeteorSpeed;
             let gameRunning = true;
             let gamePaused = false;
             let gameTimers = new Set();
+            let dinosaurImmune = false;
+            let dinosaurImmunityTimer = null;
             let eggInFlight = false;
             let eggSpawnScheduled = false;
             const DINO_FACE_LEFT = 'scaleX(1)';
@@ -139,6 +143,10 @@
                     clearInterval(timer);
                 });
                 gameTimers.clear();
+                dinosaurImmunityTimer = null;
+                dinosaurImmune = false;
+                meteoriteProcess = null;
+                meteoriteSpawnTimer = null;
             }
 
             function centerGameStage() {
@@ -174,9 +182,21 @@
 
             function glowDinosaurOnCatch() {
                 const dinosaur = document.getElementById('dino');
+                if (dinosaurImmunityTimer) {
+                    clearTimeout(dinosaurImmunityTimer);
+                    gameTimers.delete(dinosaurImmunityTimer);
+                }
+                dinosaurImmune = true;
                 dinosaur.classList.remove('dino-caught');
                 void dinosaur.offsetWidth;
                 dinosaur.classList.add('dino-caught');
+                dinosaurImmunityTimer = setTimeout(function () {
+                    gameTimers.delete(dinosaurImmunityTimer);
+                    dinosaurImmunityTimer = null;
+                    dinosaurImmune = false;
+                    dinosaur.classList.remove('dino-caught');
+                }, 2000);
+                gameTimers.add(dinosaurImmunityTimer);
             }
 
             function endGame() {
@@ -258,6 +278,7 @@
                 eggSpawnScheduled = false;
                 stopSnow();
                 applyBiomeVisuals();
+                updateBiomeCounterVisibility();
                 const dinosaurImage = frostSaurusUnlocked ? './dino-frost.png' : './dino1.png';
                 $('#canvas').empty().append('<img src="' + dinosaurImage + '" style="left:950px; top:480px; position:absolute" id="dino" name="dino"/>');
                 $('#game-over').hide();
@@ -355,7 +376,18 @@
             function advanceToNextBiome() {
                 if (currentBiomeIndex >= BIOMES.length - 1) return false;
                 clearEggSpawner();
-                meteoriteActive = Boolean($('#meteorit').length);
+                if (meteoriteProcess) {
+                    clearInterval(meteoriteProcess);
+                    gameTimers.delete(meteoriteProcess);
+                    meteoriteProcess = null;
+                }
+                if (meteoriteSpawnTimer) {
+                    clearTimeout(meteoriteSpawnTimer);
+                    gameTimers.delete(meteoriteSpawnTimer);
+                    meteoriteSpawnTimer = null;
+                }
+                $('#meteorit').remove();
+                meteoriteActive = false;
                 currentBiomeIndex++;
                 const biome = getCurrentBiome();
                 counterMeteorites = 0;
@@ -370,12 +402,28 @@
                 applyBiomeVisuals();
                 showBiomeBanner(biome);
                 updateStatus();
+                updateBiomeCounterVisibility();
+                highlightBiomeCounter();
                 showCountdown().then(function () {
                     if (!gameRunning) return;
                     gamePaused = false;
+                    meteoriteFall();
                     eggFall();
                 });
                 return true;
+            }
+
+            function scheduleMeteoriteFall(delay) {
+                if (meteoriteSpawnTimer) {
+                    clearTimeout(meteoriteSpawnTimer);
+                    gameTimers.delete(meteoriteSpawnTimer);
+                }
+                meteoriteSpawnTimer = setTimeout(function () {
+                    gameTimers.delete(meteoriteSpawnTimer);
+                    meteoriteSpawnTimer = null;
+                    meteoriteFall();
+                }, delay);
+                gameTimers.add(meteoriteSpawnTimer);
             }
 
             function completeLevelWithCheat() {
@@ -519,12 +567,22 @@
             function updateStatus() {
                 $('#status-1').text("Eggs: " + counterEggs + "/" + maxEggs);
                 $('#status-2').text("Eggs saved: " + counterSavedEggs);
+                $('#status-3').text("Golden eggs: " + counterGoldenEggs);
                 $('#status-4').text("Meteor speed: " + meteoriteFallStep);
-                if (getCurrentBiome().iceEggs) {
-                    $('#status-3').text("Ice eggs: " + counterIceEggs + "/" + ICE_EGGS_TO_UNLOCK);
-                } else {
-                    $('#status-3').text("Golden eggs: " + counterGoldenEggs);
-                }
+                $('#status-5').text("Ice eggs: " + counterIceEggs + "/" + ICE_EGGS_TO_UNLOCK);
+            }
+
+            function updateBiomeCounterVisibility() {
+                const biome = getCurrentBiome();
+                $('#status-3').css('display', biome.id === 'plain' ? 'block' : 'none');
+                $('#status-5').css('display', biome.iceEggs ? 'block' : 'none');
+            }
+
+            function highlightBiomeCounter() {
+                const counter = getCurrentBiome().iceEggs ? $('#status-5')[0] : $('#status-3')[0];
+                counter.classList.remove('status-highlight');
+                void counter.offsetWidth;
+                counter.classList.add('status-highlight');
             }
 
             function performMeteoriteFall(object, process) {
@@ -537,8 +595,19 @@
                 const meteorite = $(object)[0];
                 const dinosaur = $('#dino')[0];
                 if (meteorite && dinosaur && elementsTouch(meteorite, dinosaur)) {
-                    $('#dino').css('filter', 'opacity(0.5) drop-shadow(0 0 0 red)');
-                    endGame();
+                    if (dinosaurImmune) {
+                        $(object).remove();
+                        clearInterval(process);
+                        gameTimers.delete(process);
+                        if (meteoriteProcess === process) meteoriteProcess = null;
+                        meteoriteActive = false;
+                        if (counterMeteorites < maxMeteorites) {
+                            scheduleMeteoriteFall(delayBetweenMeteorites);
+                        }
+                    } else {
+                        $('#dino').css('filter', 'opacity(0.5) drop-shadow(0 0 0 red)');
+                        endGame();
+                    }
                     return;
                 }
                 if (top1 > 530) {
@@ -554,12 +623,11 @@
                     $(object).remove();
                     clearInterval(process);
                     gameTimers.delete(process);
+                    if (meteoriteProcess === process) meteoriteProcess = null;
                     meteoriteActive = false;
 
                     if (counterMeteorites < maxMeteorites) {
-                        sleep(delayBetweenMeteorites).then(() => {
-                            meteoriteFall();
-                        });
+                        scheduleMeteoriteFall(delayBetweenMeteorites);
                     }
                 }
             }
@@ -628,7 +696,7 @@
                 meteoriteActive = true;
                 let meteoriteImage = getCurrentBiome().meteoriteImage || './meteor-green.png';
                 $("#canvas").append("<img src=\"" + meteoriteImage + "\" style=\"left:" + pos + "px; top:0px; width: 70px; position: absolute\" id=\"meteorit\" name=\"meteorit\" />");
-                let meteoriteProcess = gameInterval(function () {
+                meteoriteProcess = gameInterval(function () {
                     let d = performMeteoriteFall('#meteorit', meteoriteProcess);
                 }, speedMeteorite);
             }
@@ -712,6 +780,9 @@
             </div>
             <div class="status-text" id="status-3">
                 Golden eggs: 0
+            </div>
+            <div class="status-text" id="status-5">
+                Ice eggs: 0/5
             </div>
         </div>
     </div>
