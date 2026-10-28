@@ -71,11 +71,32 @@
             const GAME_HEIGHT = 648;
             const STATUS_HEIGHT = 72;
             const DINO_WIDTH = 200;
+            const DINO_HEIGHT = 159;
             const EGG_WIDTH = 74;
             const METEOR_WIDTH = 70;
             const ICE_EGGS_TO_UNLOCK = 5;
+            // These sheets have 470x456 cells; the clipped fifth column is intentionally excluded.
+            const SPRITE_FRAME_WIDTH = 470;
+            const SPRITE_FRAME_HEIGHT = 456;
+            const SPRITE_FRAME_COLUMNS = 4;
+            const SPRITE_FRAME_ROWS = 4;
+            const SPRITE_FRAME_COUNT = SPRITE_FRAME_COLUMNS * SPRITE_FRAME_ROWS;
+            // Match the static dinosaur's ground baseline while normalizing each pose.
+            const DINO_GROUND_LINE = 149;
             const FROST_SAURUS_STORAGE_KEY = 'dinomix.frostSaurusUnlocked';
             const EQUIPPED_SKIN_STORAGE_KEY = 'dinomix.equippedSkin';
+            const DINO_ANIMATIONS = {
+                default: { src: './dinosaurs/sprites-default.png', frames: [] },
+                frost: { src: './dinosaurs/sprites-ice.png', frames: [] },
+                lava: { src: './dinosaurs/sprites-lava.png', frames: [] }
+            };
+            const DINO_SPRITE_SHEET_BOUNDS = {
+                // Tuned to match the original static dino proportions inside 200x159.
+                default: { x: 8, y: 100, width: 448, height: 306 },
+                frost: { x: 10, y: 105, width: 450, height: 304 },
+                lava: { x: 4, y: 102, width: 462, height: 304 }
+            };
+            const DINO_FALLBACK_IMAGES = {};
             const SKINS = [
                 { id: 'default', name: 'Dino Original', image: './dino1.png' },
                 { id: 'frost', name: 'Frostosaurus', image: './dino-frost.png', unlockRequired: true }
@@ -121,10 +142,12 @@
             let gameTimers = new Set();
             let dinosaurImmune = false;
             let dinosaurImmunityTimer = null;
+            let dinoAnimationTimer = null;
+            let dinoFacing = 'right';
+            let currentDinoFrame = 0;
+            let pressedMovementKeys = new Set();
             let eggInFlight = false;
             let eggSpawnScheduled = false;
-            const DINO_FACE_LEFT = 'scaleX(1)';
-            const DINO_FACE_RIGHT = 'scaleX(-1)';
 
             let timeScale = 1; // 1 = normal speed; higher values slow the game (e.g., 50)
             let slowActive = false;
@@ -155,8 +178,157 @@
                 gameTimers.clear();
                 dinosaurImmunityTimer = null;
                 dinosaurImmune = false;
+                dinoAnimationTimer = null;
+                pressedMovementKeys.clear();
                 meteoriteProcess = null;
                 meteoriteSpawnTimer = null;
+            }
+
+            function renderDinosaurFrame() {
+                const canvas = document.getElementById('dino');
+                if (!canvas) return;
+                const context = canvas.getContext('2d');
+                context.clearRect(0, 0, DINO_WIDTH, DINO_HEIGHT);
+
+                const animationId = equippedSkin === 'frost' && frostSaurusUnlocked
+                    ? 'frost' : 'default';
+                const animation = DINO_ANIMATIONS[animationId];
+                const frame = animation.frames.length
+                    ? animation.frames[currentDinoFrame % animation.frames.length] : null;
+                const fallback = DINO_FALLBACK_IMAGES[animationId];
+                context.save();
+                if (dinoFacing === 'left') {
+                    context.translate(DINO_WIDTH, 0);
+                    context.scale(-1, 1);
+                }
+                if (frame) {
+                    context.drawImage(frame, 0, 0);
+                } else if (fallback && fallback.complete && fallback.naturalWidth) {
+                    context.drawImage(fallback, 0, 0, DINO_WIDTH, DINO_HEIGHT);
+                }
+                context.restore();
+            }
+
+            function cacheDinosaurFrames(image, animationId) {
+                        const animation = DINO_ANIMATIONS[animationId];
+                        const bounds = DINO_SPRITE_SHEET_BOUNDS[animationId];
+                        if (!animation || !bounds) {
+                            console.error('Missing dinosaur animation metadata for:', animationId);
+                            return;
+                        }
+
+                        animation.frames = [];
+                        const scale = Math.min(
+                            (DINO_WIDTH - 4) / bounds.width,
+                            (DINO_HEIGHT - 4) / bounds.height
+                        );
+                        const destWidth = bounds.width * scale;
+                        const destHeight = bounds.height * scale;
+                        const destX = (DINO_WIDTH - destWidth) / 2;
+                        const destY = DINO_GROUND_LINE - destHeight;
+
+                        for (let row = 0; row < SPRITE_FRAME_ROWS; row++) {
+                            for (let column = 0; column < SPRITE_FRAME_COLUMNS; column++) {
+                                const frame = document.createElement('canvas');
+                                frame.width = DINO_WIDTH;
+                                frame.height = DINO_HEIGHT;
+                                const frameContext = frame.getContext('2d');
+                                frameContext.drawImage(
+                                    image,
+                                    column * SPRITE_FRAME_WIDTH + bounds.x,
+                                    row * SPRITE_FRAME_HEIGHT + bounds.y,
+                                    bounds.width,
+                                    bounds.height,
+                                    destX,
+                                    destY,
+                                    destWidth,
+                                    destHeight
+                                );
+                                animation.frames.push(frame);
+                            }
+                        }
+
+                        if (animation.frames.length !== SPRITE_FRAME_COUNT) {
+                            console.error('Unexpected dinosaur sprite frame count:', animationId, animation.frames.length);
+                        }
+                        renderDinosaurFrame();
+            }
+
+            function prepareDinosaurAnimations() {
+                        Object.keys(DINO_ANIMATIONS).forEach(function (animationId) {
+                            const animation = DINO_ANIMATIONS[animationId];
+                            const image = new Image();
+                            image.onload = function () {
+                                cacheDinosaurFrames(image, animationId);
+                            };
+                            image.onerror = function () {
+                                console.error('Could not load dinosaur sprite sheet:', animation.src);
+                            };
+                            image.src = animation.src;
+                        });
+
+                        [
+                            { id: 'default', src: './dino1.png' },
+                            { id: 'frost', src: './dino-frost.png' }
+                        ].forEach(function (skin) {
+                            const image = new Image();
+                            image.onload = renderDinosaurFrame;
+                            image.onerror = function () {
+                                console.error('Could not load dinosaur fallback image:', skin.src);
+                            };
+                            image.src = skin.src;
+                            DINO_FALLBACK_IMAGES[skin.id] = image;
+                        });
+            }
+
+            function isCheatPrefixInProgress(nextChar) {
+                        const cheat = 'gimmeskins';
+                        const candidate = (cheatBuffer + nextChar.toLowerCase()).toLowerCase().slice(-cheat.length);
+                        for (let index = 0; index < candidate.length; index++) {
+                            if (cheat.startsWith(candidate.slice(index))) return true;
+                        }
+                        return false;
+            }
+
+            function beginDinosaurMovement(keyCode, direction, nextLeft) {
+                        $('#dino').css('left', nextLeft + 'px');
+                        pressedMovementKeys.add(keyCode);
+                        dinoFacing = direction;
+                        const animationId = equippedSkin === 'frost' && frostSaurusUnlocked
+                            ? 'frost' : 'default';
+                        const frameCount = DINO_ANIMATIONS[animationId].frames.length;
+                        if (frameCount) {
+                            currentDinoFrame = (currentDinoFrame + 1) % frameCount;
+                        }
+                        if (!dinoAnimationTimer) {
+                            renderDinosaurFrame();
+                            dinoAnimationTimer = gameInterval(function () {
+                                const activeAnimationId = equippedSkin === 'frost' && frostSaurusUnlocked
+                                    ? 'frost' : 'default';
+                                const activeFrameCount = DINO_ANIMATIONS[activeAnimationId].frames.length;
+                                if (activeFrameCount) {
+                                    currentDinoFrame = (currentDinoFrame + 1) % activeFrameCount;
+                                }
+                                renderDinosaurFrame();
+                            }, 100);
+                        } else {
+                            renderDinosaurFrame();
+                        }
+            }
+
+            function releaseDinosaurMovement(event) {
+                if (event.keyCode !== 37 && event.keyCode !== 39) return;
+                pressedMovementKeys.delete(event.keyCode);
+                if (!pressedMovementKeys.size) {
+                    if (dinoAnimationTimer) {
+                        clearInterval(dinoAnimationTimer);
+                        gameTimers.delete(dinoAnimationTimer);
+                        dinoAnimationTimer = null;
+                    }
+                    return;
+                }
+                dinoFacing = pressedMovementKeys.has(37) ? 'left' : 'right';
+                renderDinosaurFrame();
             }
 
             function centerGameStage() {
@@ -329,7 +501,7 @@
                     const selectedSkin = getAvailableSkins()[selectedSkinIndex];
                     if (selectedSkin) {
                         equippedSkin = selectedSkin.id;
-                        $('#dino').attr('src', selectedSkin.image);
+                        renderDinosaurFrame();
                         try {
                             window.localStorage.setItem(EQUIPPED_SKIN_STORAGE_KEY, equippedSkin);
                         } catch (error) {
@@ -378,9 +550,17 @@
                 stopSnow();
                 applyBiomeVisuals();
                 updateBiomeCounterVisibility();
-                const dinosaurImage = equippedSkin === 'frost' && frostSaurusUnlocked
-                    ? './dino-frost.png' : './dino1.png';
-                $('#canvas').empty().append('<img src="' + dinosaurImage + '" style="left:950px; top:480px; position:absolute" id="dino" name="dino"/>');
+                dinoFacing = 'right';
+                currentDinoFrame = 0;
+                $('#canvas').empty().append(
+                    $('<canvas>', {
+                        id: 'dino',
+                        name: 'dino',
+                        width: DINO_WIDTH,
+                        height: DINO_HEIGHT
+                    }).css({left: '950px', top: '480px', position: 'absolute'})
+                );
+                renderDinosaurFrame();
                 $('#game-over').hide();
                 updateStatus();
                 showBiomeBanner(getCurrentBiome());
@@ -855,9 +1035,7 @@
                     return;
                 }
                 if ((e.key === 's' || e.key === 'S') && !gamePaused) {
-                    const cheatInProgress = 'gimmeskins'.startsWith(
-                        cheatBuffer + e.key.toLowerCase()
-                    );
+                    const cheatInProgress = isCheatPrefixInProgress(e.key);
                     if (!cheatInProgress) {
                         openSkinMenu();
                         return;
@@ -869,24 +1047,30 @@
                         let left = $('#dino').css('left');
                         let left1 = parseInt(left.replace("px", ""));
                         if (left1 <= 5) { break}
-                        let nextLeft = left1 - 15;
-                        $('#dino').css('left', nextLeft + "px");
-                        $('#dino').css('transform', DINO_FACE_LEFT);
+                        beginDinosaurMovement(37, 'left', left1 - 15);
                         break;
                     case 39:
                         let right = $('#dino').css('left');
                         let right1 = parseInt(right.replace("px", ""));
                         if (right1 >= 950) { break}
-                        let nextRight = right1 + 15;
-                        $('#dino').css('left', nextRight + "px");
-                        $('#dino').css('transform', DINO_FACE_RIGHT);
+                        beginDinosaurMovement(39, 'right', right1 + 15);
                         break;
                 }
             };
 
+            document.addEventListener('keyup', releaseDinosaurMovement);
+            window.addEventListener('blur', function () {
+                if (dinoAnimationTimer) {
+                    clearInterval(dinoAnimationTimer);
+                    gameTimers.delete(dinoAnimationTimer);
+                    dinoAnimationTimer = null;
+                }
+                pressedMovementKeys.clear();
+            });
             $('#respawn').on('click', startGame);
             window.addEventListener('resize', centerGameStage);
             centerGameStage();
+            prepareDinosaurAnimations();
             startGame();
 
         });

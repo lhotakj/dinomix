@@ -162,6 +162,7 @@ h1 {
 }
 
 #dino {
+    display: block;
     z-index: 1000;
 }
 
