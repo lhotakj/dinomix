@@ -33,7 +33,7 @@
                     name: 'Forest',
                     subtitle: 'A wild adventure awaits!',
                     background: './background.jpg',
-                    maxMeteorSpeed: 30,
+                    maxMeteorSpeed: 20,
                     eggsToUnlock: 10,
                     meteoriteImage: './meteor-green.png',
                     bannerColor: '#eaffd7',
@@ -44,7 +44,7 @@
                     name: 'Frosty Tundra',
                     subtitle: 'More eggs incoming!',
                     background: './background-tundra.png',
-                    maxMeteorSpeed: 45,
+                    maxMeteorSpeed: 25,
                     eggsToUnlock: 25,
                     meteoriteImage: './meteor-blue.png',
                     iceEffects: true,
@@ -58,7 +58,7 @@
                     name: 'Volcano',
                     subtitle: 'Hot and fiery!',
                     background: './background-volcano.png',
-                    maxMeteorSpeed: 60,
+                    maxMeteorSpeed: 30,
                     eggsToUnlock: 20,
                     meteoriteImage: './meteor-red.png',
                     burningDust: true,
@@ -75,6 +75,11 @@
             const METEOR_WIDTH = 70;
             const ICE_EGGS_TO_UNLOCK = 5;
             const FROST_SAURUS_STORAGE_KEY = 'dinomix.frostSaurusUnlocked';
+            const EQUIPPED_SKIN_STORAGE_KEY = 'dinomix.equippedSkin';
+            const SKINS = [
+                { id: 'default', name: 'Dino Original', image: './dino1.png' },
+                { id: 'frost', name: 'Frostosaurus', image: './dino-frost.png', unlockRequired: true }
+            ];
             const SAFE_FALL_DISTANCE = DINO_WIDTH + Math.max(EGG_WIDTH, METEOR_WIDTH) + 10;
             const FALLING_OBJECT_MARGIN = 20;
 
@@ -88,11 +93,16 @@
             let counterGoldenEggs = 0;
             let counterIceEggs = 0;
             let frostSaurusUnlocked = false;
+            let equippedSkin = 'default';
+            let frostUnlockMessagePromise = null;
             try {
                 frostSaurusUnlocked = window.localStorage.getItem(FROST_SAURUS_STORAGE_KEY) === 'true';
+                equippedSkin = window.localStorage.getItem(EQUIPPED_SKIN_STORAGE_KEY) || 'default';
             } catch (error) {
-                console.error('Could not load Frost-saurus unlock state:', error);
+                console.error('Could not load saved skin state:', error);
             }
+            if (equippedSkin === 'frost' && !frostSaurusUnlocked) equippedSkin = 'default';
+            let skinMenuOpen = false;
             let maxMeteorites = 100;
             let currentBiomeIndex = 0;
             let maxEggs = BIOMES[0].eggsToUnlock;
@@ -225,16 +235,28 @@
 
             function showFrostSaurusUnlockMessage() {
                 $('#frost-saurus-unlock').remove();
+                gamePaused = true;
                 const message = $('<div>', {
                     id: 'frost-saurus-unlock',
                     class: 'frost-saurus-unlock'
-                }).text('Congrats, you have received the Frost-saurus skin');
+                }).append(
+                    $('<div>').text('Congratulation for getting the Frostosaurus skin'),
+                    $('<img>', { src: './dino-frost.png', alt: 'Frostosaurus skin' })
+                );
                 $('#canvas').append(message);
-                const timer = setTimeout(function () {
-                    gameTimers.delete(timer);
-                    message.fadeOut(300, function () { $(this).remove(); });
-                }, 5000);
-                gameTimers.add(timer);
+                frostUnlockMessagePromise = new Promise(function (resolve) {
+                    const timer = setTimeout(function () {
+                        gameTimers.delete(timer);
+                        message.fadeOut(300, function () {
+                            $(this).remove();
+                            if (gameRunning && !skinMenuOpen) gamePaused = false;
+                            resolve();
+                        });
+                    }, 4700);
+                    gameTimers.add(timer);
+                }).then(function () {
+                    frostUnlockMessagePromise = null;
+                });
             }
 
             function unlockFrostSaurus() {
@@ -245,14 +267,91 @@
                 } catch (error) {
                     console.error('Could not save Frost-saurus unlock state:', error);
                 }
-                $('#dino').attr('src', './dino-frost.png');
                 showFrostSaurusUnlockMessage();
+            }
+
+            function getAvailableSkins() {
+                return SKINS.filter(function (skin) {
+                    return !skin.unlockRequired || frostSaurusUnlocked;
+                });
+            }
+
+            function renderSkinMenu() {
+                const menu = $('#skin-menu');
+                const availableSkins = getAvailableSkins();
+                menu.empty();
+                menu.append($('<h2>').text('Choose your dinosaur'));
+                const choices = $('<div>', { class: 'skin-choices' });
+                availableSkins.forEach(function (skin, index) {
+                    const card = $('<button>', {
+                        type: 'button',
+                        class: 'skin-card' + (skin.id === equippedSkin ? ' selected' : ''),
+                        'data-skin-id': skin.id
+                    }).append(
+                        $('<img>', { src: skin.image, alt: skin.name }),
+                        $('<span>').text(skin.name)
+                    );
+                    card.on('click', function () {
+                        selectSkin(index);
+                    });
+                    choices.append(card);
+                });
+                menu.append(choices);
+                menu.append($('<p>').text('← → to browse · Enter to equip · Esc to close'));
+            }
+
+            function selectSkin(index) {
+                const availableSkins = getAvailableSkins();
+                if (!availableSkins.length) return;
+                selectedSkinIndex = (index + availableSkins.length) % availableSkins.length;
+                $('#skin-menu .skin-card').removeClass('selected')
+                    .eq(selectedSkinIndex).addClass('selected');
+            }
+
+            let selectedSkinIndex = 0;
+
+            function openSkinMenu() {
+                if (!gameRunning || skinMenuOpen || $('#frost-saurus-unlock').length) return;
+                gamePaused = true;
+                skinMenuOpen = true;
+                $('#skin-menu').css({display: 'flex', opacity: 0});
+                const availableSkins = getAvailableSkins();
+                selectedSkinIndex = Math.max(0, availableSkins.findIndex(function (skin) {
+                    return skin.id === equippedSkin;
+                }));
+                renderSkinMenu();
+                $('#skin-menu').stop(true, true).animate({opacity: 1}, 220);
+            }
+
+            function closeSkinMenu(shouldEquip) {
+                if (!skinMenuOpen) return;
+                if (shouldEquip) {
+                    const selectedSkin = getAvailableSkins()[selectedSkinIndex];
+                    if (selectedSkin) {
+                        equippedSkin = selectedSkin.id;
+                        $('#dino').attr('src', selectedSkin.image);
+                        try {
+                            window.localStorage.setItem(EQUIPPED_SKIN_STORAGE_KEY, equippedSkin);
+                        } catch (error) {
+                            console.error('Could not save equipped skin:', error);
+                        }
+                    }
+                }
+                skinMenuOpen = false;
+                $('#skin-menu').stop(true, true).animate({opacity: 0}, 220, function () {
+                    $(this).hide();
+                    $(this).empty();
+                    if (gameRunning) gamePaused = false;
+                });
             }
 
             function startGame() {
                 clearGameTimers();
                 clearEggSpawner();
                 gameRunning = true;
+                frostUnlockMessagePromise = null;
+                skinMenuOpen = false;
+                $('#skin-menu').hide().empty();
                 speedEgg = 50;
                 speedMeteorite = 20;
                 meteoriteFallStep = DEFAULT_METEORITE_FALL_STEP;
@@ -279,16 +378,17 @@
                 stopSnow();
                 applyBiomeVisuals();
                 updateBiomeCounterVisibility();
-                const dinosaurImage = frostSaurusUnlocked ? './dino-frost.png' : './dino1.png';
+                const dinosaurImage = equippedSkin === 'frost' && frostSaurusUnlocked
+                    ? './dino-frost.png' : './dino1.png';
                 $('#canvas').empty().append('<img src="' + dinosaurImage + '" style="left:950px; top:480px; position:absolute" id="dino" name="dino"/>');
                 $('#game-over').hide();
                 updateStatus();
                 showBiomeBanner(getCurrentBiome());
                 gameInterval(function () {
-                    meteoriteFallStep = Math.min(maxMeteorSpeed, meteoriteFallStep + 2);
+                    meteoriteFallStep = Math.min(maxMeteorSpeed, meteoriteFallStep + 1);
                     updateStatus();
                 }, 5000);
-                showCountdown().then(function () {
+                Promise.resolve(frostUnlockMessagePromise).then(showCountdown).then(function () {
                     if (!gameRunning) return;
                     gamePaused = false;
                     meteoriteFall();
@@ -421,6 +521,10 @@
                 meteoriteSpawnTimer = setTimeout(function () {
                     gameTimers.delete(meteoriteSpawnTimer);
                     meteoriteSpawnTimer = null;
+                    if (gamePaused) {
+                        scheduleMeteoriteFall(250);
+                        return;
+                    }
                     meteoriteFall();
                 }, delay);
                 gameTimers.add(meteoriteSpawnTimer);
@@ -441,7 +545,12 @@
                     gameTimers.delete(eggSpawnTimer);
                     eggSpawnTimer = null;
                     eggSpawnScheduled = false;
-                    if (gameRunning && counterEggs < maxEggs) eggFall();
+                    if (!gameRunning || counterEggs >= maxEggs) return;
+                    if (gamePaused) {
+                        scheduleEggFall(250);
+                        return;
+                    }
+                    eggFall();
                 }, delay);
                 gameTimers.add(eggSpawnTimer);
             }
@@ -543,7 +652,7 @@
             document.addEventListener('keypress', function (e) {
                 cheatBuffer += e.key.toLowerCase();
                 if (!gameRunning || gamePaused) return;
-                if (cheatBuffer.length > 6) cheatBuffer = cheatBuffer.slice(-6);
+                if (cheatBuffer.length > 10) cheatBuffer = cheatBuffer.slice(-10);
                 if (cheatBuffer.endsWith('iddqd')) {
                     cheatBuffer = '';
                     completeLevelWithCheat();
@@ -561,6 +670,13 @@
                 } else if (cheatBuffer.endsWith('tundra')) {
                     cheatBuffer = '';
                     completeLevelWithCheat();
+                } else if (cheatBuffer.endsWith('gimmeskins')) {
+                    cheatBuffer = '';
+                    if (frostSaurusUnlocked) {
+                        showFrostSaurusUnlockMessage();
+                    } else {
+                        unlockFrostSaurus();
+                    }
                 }
             });
 
@@ -725,7 +841,29 @@
 
 
             document.onkeydown = function (e) {
-                if (!gameRunning || gamePaused) return;
+                if (!gameRunning) return;
+                if (skinMenuOpen) {
+                    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        selectSkin(selectedSkinIndex + (e.key === 'ArrowRight' ? 1 : -1));
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        closeSkinMenu(true);
+                    } else if (e.key === 'Escape') {
+                        closeSkinMenu(false);
+                    }
+                    return;
+                }
+                if ((e.key === 's' || e.key === 'S') && !gamePaused) {
+                    const cheatInProgress = 'gimmeskins'.startsWith(
+                        cheatBuffer + e.key.toLowerCase()
+                    );
+                    if (!cheatInProgress) {
+                        openSkinMenu();
+                        return;
+                    }
+                }
+                if (gamePaused) return;
                 switch (e.keyCode) {
                     case 37:
                         let left = $('#dino').css('left');
@@ -784,8 +922,13 @@
             <div class="status-text" id="status-5">
                 Ice eggs: 0/5
             </div>
+            <div class="status-text skin-shortcut" id="skin-shortcut">
+                SKINS - press S to equip
+            </div>
         </div>
     </div>
+
+    <div id="skin-menu" role="dialog" aria-modal="true" aria-label="Choose a dinosaur skin"></div>
 
     <div style="max-width:1152px; max-height:648px; position: absolute; background-image: url('./background.jpg'); background-repeat: no-repeat; background-size: contain, cover;   height: 648px; width: 1152px;"
          id="canvas" name="canvas">
